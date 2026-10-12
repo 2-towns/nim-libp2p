@@ -843,26 +843,29 @@ proc sendNonHighPriorityTask(p: PubSubPeer) {.async: (raises: [CancelledError]).
         continue
 
     let messageBytes = msg.data.len
-    defer:
-      p.rpcmessagequeue.bytes[priority] -= messageBytes
-    while p.rpcmessagequeue.sendPriorityQueue.len > 0:
-      p.clearSendPriorityQueue()
-      # waiting for the last future minimizes the number of times we have to
-      # wait for something (each wait = performance cost) -
-      # clearSendPriorityQueue ensures we're not waiting for an already-finished
-      # future
-      if p.rpcmessagequeue.sendPriorityQueue.len > 0:
-        # `race` prevents `p.rpcmessagequeue.sendPriorityQueue[^1]` from being
-        # cancelled when this task is cancelled
-        discard await race(p.rpcmessagequeue.sendPriorityQueue[^1])
-    when defined(pubsubpeer_queue_metrics):
-      if priority == MessagePriority.Medium:
-        libp2p_gossipsub_medium_priority_queue_size.dec(labelValues = [$p.peerId])
-      else:
-        libp2p_gossipsub_low_priority_queue_size.dec(labelValues = [$p.peerId])
+    try:
+      while p.rpcmessagequeue.sendPriorityQueue.len > 0:
+        p.clearSendPriorityQueue()
+        # waiting for the last future minimizes the number of times we have to
+        # wait for something (each wait = performance cost) -
+        # clearSendPriorityQueue ensures we're not waiting for an already-finished
+        # future
+        if p.rpcmessagequeue.sendPriorityQueue.len > 0:
+          # `race` prevents `p.rpcmessagequeue.sendPriorityQueue[^1]` from being
+          # cancelled when this task is cancelled
+          discard await race(p.rpcmessagequeue.sendPriorityQueue[^1])
+      when defined(pubsubpeer_queue_metrics):
+        if priority == MessagePriority.Medium:
+          libp2p_gossipsub_medium_priority_queue_size.dec(labelValues = [$p.peerId])
+        else:
+          libp2p_gossipsub_low_priority_queue_size.dec(labelValues = [$p.peerId])
 
-    let useCustomStream = msg.useCustomStream
-    await p.sendMsg(move(msg.data), useCustomStream)
+      let useCustomStream = msg.useCustomStream
+      await p.sendMsg(move(msg.data), useCustomStream)
+    except CancelledError as exc:
+      p.rpcmessagequeue.bytes[priority] -= messageBytes
+      raise exc
+    p.rpcmessagequeue.bytes[priority] -= messageBytes
 
 proc startSendNonHighPriorityTask(p: PubSubPeer) =
   trace "starting sendNonHighPriorityTask", peer = p
