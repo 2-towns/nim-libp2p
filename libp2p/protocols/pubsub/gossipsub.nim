@@ -137,6 +137,9 @@ proc init*(
     testExtensionConfig = Opt.none(TestExtensionConfig),
     partialMessageExtensionConfig = Opt.none(PartialMessageExtensionConfig),
     pingpongExtensionConfig = Opt.none(PingPongExtensionConfig),
+    maxHighPriorityQueueBytes = DefaultMaxHighPriorityQueueBytes,
+    maxMediumPriorityQueueBytes = DefaultMaxMediumPriorityQueueBytes,
+    maxLowPriorityQueueBytes = DefaultMaxLowPriorityQueueBytes,
 ): GossipSubParams =
   GossipSubParams(
     explicit: true,
@@ -180,6 +183,9 @@ proc init*(
     maxHighPriorityQueueLen: maxHighPriorityQueueLen,
     maxMediumPriorityQueueLen: maxMediumPriorityQueueLen,
     maxLowPriorityQueueLen: maxLowPriorityQueueLen,
+    maxHighPriorityQueueBytes: maxHighPriorityQueueBytes,
+    maxMediumPriorityQueueBytes: maxMediumPriorityQueueBytes,
+    maxLowPriorityQueueBytes: maxLowPriorityQueueBytes,
     sendIDontWantOnPublish: sendIDontWantOnPublish,
     testExtensionConfig: testExtensionConfig,
     partialMessageExtensionConfig: partialMessageExtensionConfig,
@@ -248,6 +254,12 @@ proc validateParameters*(parameters: GossipSubParams): Result[void, cstring] =
     err("gossipsub: maxMediumPriorityQueueLen parameter error, Must be > 0")
   elif parameters.maxLowPriorityQueueLen <= 0:
     err("gossipsub: maxLowPriorityQueueLen parameter error, Must be > 0")
+  elif parameters.maxHighPriorityQueueBytes <= 0:
+    err("gossipsub: maxHighPriorityQueueBytes parameter error, Must be > 0")
+  elif parameters.maxMediumPriorityQueueBytes <= 0:
+    err("gossipsub: maxMediumPriorityQueueBytes parameter error, Must be > 0")
+  elif parameters.maxLowPriorityQueueBytes <= 0:
+    err("gossipsub: maxLowPriorityQueueBytes parameter error, Must be > 0")
   else:
     validateOverheadRateLimit(parameters)
 
@@ -1236,5 +1248,8 @@ method getOrCreatePeer*(
   peer.maxHighPriorityQueueLen = g.parameters.maxHighPriorityQueueLen
   peer.maxMediumPriorityQueueLen = g.parameters.maxMediumPriorityQueueLen
   peer.maxLowPriorityQueueLen = g.parameters.maxLowPriorityQueueLen
+  peer.maxHighPriorityQueueBytes = g.parameters.maxHighPriorityQueueBytes
+  peer.maxMediumPriorityQueueBytes = g.parameters.maxMediumPriorityQueueBytes
+  peer.maxLowPriorityQueueBytes = g.parameters.maxLowPriorityQueueBytes
 
   return peer

@@ -76,6 +76,9 @@ const
   DefaultMaxHighPriorityQueueLen* = 256
   DefaultMaxMediumPriorityQueueLen* = 512
   DefaultMaxLowPriorityQueueLen* = 1024
+  DefaultMaxHighPriorityQueueBytes* = 16 * 1024 * 1024
+  DefaultMaxMediumPriorityQueueBytes* = 32 * 1024 * 1024
+  DefaultMaxLowPriorityQueueBytes* = 64 * 1024 * 1024
 
 type
   PeerRateLimitError* = object of CatchableError
@@ -130,6 +133,8 @@ type
   RpcMessageQueue* = ref object
     # Tracks async tasks for sending high-priority peer-published messages.
     sendPriorityQueue: Deque[Future[void]]
+    # Encoded RPC bytes, including messages held by pending sends.
+    bytes: array[MessagePriority, int]
     # Queue for local published messages
     mediumPriorityQueue: Deque[QueuedMessage]
     # Queue for lower-priority messages, like "IWANT" replies and relay messages.
@@ -187,6 +192,9 @@ type
     maxHighPriorityQueueLen*: int
     maxMediumPriorityQueueLen*: int
     maxLowPriorityQueueLen*: int
+    maxHighPriorityQueueBytes*: int
+    maxMediumPriorityQueueBytes*: int
+    maxLowPriorityQueueBytes*: int
     stopped: bool
     customStreamCallbacks*: Opt[CustomStreamCallbacks]
     connectFut: Future[void]
@@ -270,28 +278,36 @@ func determineQueueAction*(
     priority: MessagePriority,
     sendPriorityQueueLen, mediumPriorityQueueLen, lowPriorityQueueLen: int,
     maxHighPriorityQueueLen, maxMediumPriorityQueueLen, maxLowPriorityQueueLen: int,
+    messageBytes: int = 0,
+    highPriorityQueueBytes, mediumPriorityQueueBytes, lowPriorityQueueBytes: int = 0,
+    maxHighPriorityQueueBytes: int = DefaultMaxHighPriorityQueueBytes,
+    maxMediumPriorityQueueBytes: int = DefaultMaxMediumPriorityQueueBytes,
+    maxLowPriorityQueueBytes: int = DefaultMaxLowPriorityQueueBytes,
 ): QueueAction =
   let emptyQueues =
     sendPriorityQueueLen == 0 and mediumPriorityQueueLen == 0 and
-    lowPriorityQueueLen == 0
+    lowPriorityQueueLen == 0 and mediumPriorityQueueBytes == 0 and
+    lowPriorityQueueBytes == 0
 
   var send = true
   var slowPeerPenaltyDelta = 0.0
   var priority = priority
 
   if priority == MessagePriority.High or emptyQueues:
-    # If queues are empty, we can send medium/low messages immediatly
-    # thus setting the priority of the message to high
+    # Empty queues promote medium/low sends into the high-priority budget.
     priority = MessagePriority.High
 
-    if sendPriorityQueueLen >= maxHighPriorityQueueLen:
+    if sendPriorityQueueLen >= maxHighPriorityQueueLen or
+        messageBytes > maxHighPriorityQueueBytes - highPriorityQueueBytes:
       send = false
   elif priority == MessagePriority.Medium:
-    if mediumPriorityQueueLen >= maxMediumPriorityQueueLen:
+    if mediumPriorityQueueLen >= maxMediumPriorityQueueLen or
+        messageBytes > maxMediumPriorityQueueBytes - mediumPriorityQueueBytes:
       send = false
       slowPeerPenaltyDelta = 1.0
   else:
-    if lowPriorityQueueLen >= maxLowPriorityQueueLen:
+    if lowPriorityQueueLen >= maxLowPriorityQueueLen or
+        messageBytes > maxLowPriorityQueueBytes - lowPriorityQueueBytes:
       slowPeerPenaltyDelta = 1.0
       send = false
 
@@ -303,12 +319,32 @@ func determineQueueAction*(
     priority: MessagePriority,
     rpcmessagequeue: RpcMessageQueue,
     maxHighPriorityQueueLen, maxMediumPriorityQueueLen, maxLowPriorityQueueLen: int,
+    messageBytes: int = 0,
+    maxHighPriorityQueueBytes: int = DefaultMaxHighPriorityQueueBytes,
+    maxMediumPriorityQueueBytes: int = DefaultMaxMediumPriorityQueueBytes,
+    maxLowPriorityQueueBytes: int = DefaultMaxLowPriorityQueueBytes,
 ): QueueAction =
   determineQueueAction(
-    priority, rpcmessagequeue.sendPriorityQueue.len,
-    rpcmessagequeue.mediumPriorityQueue.len, rpcmessagequeue.lowPriorityQueue.len,
-    maxHighPriorityQueueLen, maxMediumPriorityQueueLen, maxLowPriorityQueueLen,
+    priority,
+    rpcmessagequeue.sendPriorityQueue.len,
+    rpcmessagequeue.mediumPriorityQueue.len,
+    rpcmessagequeue.lowPriorityQueue.len,
+    maxHighPriorityQueueLen,
+    maxMediumPriorityQueueLen,
+    maxLowPriorityQueueLen,
+    messageBytes,
+    rpcmessagequeue.bytes[High],
+    rpcmessagequeue.bytes[Medium],
+    rpcmessagequeue.bytes[Low],
+    maxHighPriorityQueueBytes,
+    maxMediumPriorityQueueBytes,
+    maxLowPriorityQueueBytes,
   )
+
+func queuedBytes*(p: PubSubPeer, priority: MessagePriority): int =
+  ## Encoded RPC bytes retained by this priority, including pending writes.
+  ## Excludes transport framing, allocator overhead, and transport-owned copies.
+  p.rpcmessagequeue.bytes[priority]
 
 proc recvObservers*(p: PubSubPeer, msg: var RPCMsg) =
   # trigger hooks
@@ -517,10 +553,19 @@ proc sendMsgSlow(
   await sendMsgContinue(stream, stream.writeLp(msg))
 
 proc sendMsg(
-    p: PubSubPeer, msg: sink seq[byte], useCustomStream: bool = false
+    p: PubSubPeer,
+    msg: sink seq[byte],
+    useCustomStream: bool = false,
+    trackHighPriority: bool = false,
 ): Future[void] {.async: (raises: [CancelledError]).} =
   ## Starts a transport write and returns its lifecycle future for internal
   ## queue accounting. Do not await this from receive-handler paths.
+  let messageBytes = msg.len
+  if trackHighPriority:
+    p.rpcmessagequeue.bytes[High] += messageBytes
+  defer:
+    if trackHighPriority:
+      p.rpcmessagequeue.bytes[High] -= messageBytes
   type StreamType = enum
     ctCustom
     ctSend
@@ -561,7 +606,7 @@ proc disconnectPeer(p: PubSubPeer): Future[void] =
 proc sendHighPriorityMessage(
     p: PubSubPeer, msg: sink seq[byte], useCustomStream: bool
 ): Future[void] =
-  let f = p.sendMsg(move(msg), useCustomStream)
+  let f = p.sendMsg(move(msg), useCustomStream, trackHighPriority = true)
   if not f.finished:
     p.rpcmessagequeue.sendPriorityQueue.addLast(f)
     when defined(pubsubpeer_queue_metrics):
@@ -571,6 +616,7 @@ proc sendHighPriorityMessage(
 proc enqueueNonHighPriorityMessage(
     p: PubSubPeer, msg: sink seq[byte], useCustomStream: bool, priority: MessagePriority
 ): Future[void] =
+  p.rpcmessagequeue.bytes[priority] += msg.len
   let queuedMsg = QueuedMessage(data: move(msg), useCustomStream: useCustomStream)
   case priority
   of MessagePriority.Medium:
@@ -610,19 +656,10 @@ proc sendEncoded*(
     priority: MessagePriority,
     useCustomStream: bool = false,
 ): Future[void] =
-  ## Asynchronously sends an encoded message to a specified `PubSubPeer` according to its priority.
-  ##
-  ## Parameters:
-  ## - `p`: The `PubSubPeer` instance to which the message is to be sent.
-  ## - `msg`: The message to be sent, encoded as a sequence of bytes (`seq[byte]`).
-  ## - `priority`:
-  ##   - `High` or any priority when all queues are empty: sent immediately
-  ##   - `Medium`: queued in `mediumPriorityQueue`. Dropped when full.
-  ##   - `Low`: queued in `lowPriorityQueue`. Dropped when full.
-  ## - `useCustomStream`: boolean used to indicate if a custom stream is going to
-  ##   be used for sending this message
-  ## Low and medium priority messages are queued and sent only after all high
-  ## priority messages have been sent.
+  ## Sends high-priority messages immediately; overflow disconnects the peer.
+  ## Medium/low overflow drops the incoming message and penalizes the peer.
+  ## Both count and encoded-byte limits apply. Empty queues promote any priority
+  ## to high, using its limits. Pending writes remain charged until completion.
   doAssert(not isNil(p), "pubsubpeer nil!")
 
   if p.stopped:
@@ -640,7 +677,9 @@ proc sendEncoded*(
   else:
     let action = determineQueueAction(
       priority, p.rpcmessagequeue, p.maxHighPriorityQueueLen,
-      p.maxMediumPriorityQueueLen, p.maxLowPriorityQueueLen,
+      p.maxMediumPriorityQueueLen, p.maxLowPriorityQueueLen, msg.len,
+      p.maxHighPriorityQueueBytes, p.maxMediumPriorityQueueBytes,
+      p.maxLowPriorityQueueBytes,
     )
 
     case action.priority
@@ -803,6 +842,9 @@ proc sendNonHighPriorityTask(p: PubSubPeer) {.async: (raises: [CancelledError]).
       else:
         continue
 
+    let messageBytes = msg.data.len
+    defer:
+      p.rpcmessagequeue.bytes[priority] -= messageBytes
     while p.rpcmessagequeue.sendPriorityQueue.len > 0:
       p.clearSendPriorityQueue()
       # waiting for the last future minimizes the number of times we have to
@@ -847,6 +889,7 @@ proc stopTasks*(p: PubSubPeer) {.async: (raises: []).} =
   p.rpcmessagequeue.sendPriorityQueue.clear()
   p.rpcmessagequeue.mediumPriorityQueue.clear()
   p.rpcmessagequeue.lowPriorityQueue.clear()
+  p.rpcmessagequeue.bytes = default(array[MessagePriority, int])
 
   when defined(pubsubpeer_queue_metrics):
     libp2p_gossipsub_high_priority_queue_size.set(labelValues = [$p.peerId], value = 0)
@@ -876,8 +919,15 @@ proc new*(
     maxLowPriorityQueueLen: int = DefaultMaxLowPriorityQueueLen,
     overheadRateLimitOpt: Opt[TokenBucket] = Opt.none(TokenBucket),
     customStreamCallbacks: Opt[CustomStreamCallbacks] = Opt.none(CustomStreamCallbacks),
+    maxHighPriorityQueueBytes: int = int.high,
+    maxMediumPriorityQueueBytes: int = int.high,
+    maxLowPriorityQueueBytes: int = int.high,
 ): T =
+  # GossipSub supplies finite byte budgets; FloodSub retains count-only limits.
   doAssert not handler.isNil, "RPC handler must be set"
+  doAssert maxHighPriorityQueueBytes > 0
+  doAssert maxMediumPriorityQueueBytes > 0
+  doAssert maxLowPriorityQueueBytes > 0
   let response = T(
     getStream: getStream,
     onEvent: onEvent,
@@ -892,6 +942,9 @@ proc new*(
     maxHighPriorityQueueLen: maxHighPriorityQueueLen,
     maxMediumPriorityQueueLen: maxMediumPriorityQueueLen,
     maxLowPriorityQueueLen: maxLowPriorityQueueLen,
+    maxHighPriorityQueueBytes: maxHighPriorityQueueBytes,
+    maxMediumPriorityQueueBytes: maxMediumPriorityQueueBytes,
+    maxLowPriorityQueueBytes: maxLowPriorityQueueBytes,
     customStreamCallbacks: customStreamCallbacks,
   )
   response.sentIHaves.addFirst(default(HashSet[MessageId]))
