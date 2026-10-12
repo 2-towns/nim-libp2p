@@ -80,6 +80,7 @@ const
   DefaultSendStreamRetryBaseDelay* = 1.seconds
   DefaultSendStreamRetryMaxDelay* = 16.seconds
   SendStreamRetryJitter = 0.2
+  DefaultMaxConcurrentValidations* = 64
 
 type
   PeerRateLimitError* = object of CatchableError
@@ -197,6 +198,7 @@ type
     sendStreamRetryMaxDelay*: Duration
     sendStreamWarnings: LogRateLimit
     rng: Rng
+    validationSlots*: AsyncSemaphore
     stopped: bool
     customStreamCallbacks*: Opt[CustomStreamCallbacks]
     connectFut: Future[void]
@@ -949,6 +951,7 @@ proc new*(
     maxHighPriorityQueueLen: int = DefaultMaxHighPriorityQueueLen,
     maxMediumPriorityQueueLen: int = DefaultMaxMediumPriorityQueueLen,
     maxLowPriorityQueueLen: int = DefaultMaxLowPriorityQueueLen,
+    maxConcurrentValidations: int = DefaultMaxConcurrentValidations,
     overheadRateLimitOpt: Opt[TokenBucket] = Opt.none(TokenBucket),
     customStreamCallbacks: Opt[CustomStreamCallbacks] = Opt.none(CustomStreamCallbacks),
     sendStreamRetryBaseDelay: Duration = DefaultSendStreamRetryBaseDelay,
@@ -974,6 +977,7 @@ proc new*(
     maxHighPriorityQueueLen: maxHighPriorityQueueLen,
     maxMediumPriorityQueueLen: maxMediumPriorityQueueLen,
     maxLowPriorityQueueLen: maxLowPriorityQueueLen,
+    validationSlots: newAsyncSemaphore(maxConcurrentValidations),
     customStreamCallbacks: customStreamCallbacks,
     sendStreamRetryBaseDelay: sendStreamRetryBaseDelay,
     sendStreamRetryMaxDelay: sendStreamRetryMaxDelay,

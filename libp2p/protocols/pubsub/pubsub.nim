@@ -543,6 +543,9 @@ template handleSelfPublishing*(p: PubSub, topic: string, data: seq[byte]) =
   if p.triggerSelf:
     await handleData(p, topic, data)
 
+func isStopping*(p: PubSub): bool =
+  p.stopping
+
 method start*(p: PubSub) {.async: (raises: [CancelledError]).} =
   p.stopping = false
   await procCall LPProtocol(p).start()

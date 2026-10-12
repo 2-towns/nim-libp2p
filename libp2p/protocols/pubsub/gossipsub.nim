@@ -72,6 +72,10 @@ declarePublicGauge(
 const SubscriptionFloodPenalty = 0.1 ## behaviour penalty for subscription abuse
 
 when defined(libp2p_expensive_metrics):
+  declarePublicGauge(
+    libp2p_gossipsub_pending_validations,
+    "number of messages in validation or waiting for a validation slot",
+  )
   declarePublicHistogram(
     libp2p_gossipsub_rpc_overhead_bytes,
     "RPC overhead bytes",
@@ -135,6 +139,7 @@ proc init*(
     maxLowPriorityQueueLen = DefaultMaxLowPriorityQueueLen,
     maxIWantsPerMessage = DefaultMaxIWantsPerMessage,
     sendIDontWantOnPublish = false,
+    maxConcurrentValidations = GossipSubMaxConcurrentValidations,
     testExtensionConfig = Opt.none(TestExtensionConfig),
     partialMessageExtensionConfig = Opt.none(PartialMessageExtensionConfig),
     pingpongExtensionConfig = Opt.none(PingPongExtensionConfig),
@@ -183,6 +188,7 @@ proc init*(
     maxLowPriorityQueueLen: maxLowPriorityQueueLen,
     maxIWantsPerMessage: maxIWantsPerMessage,
     sendIDontWantOnPublish: sendIDontWantOnPublish,
+    maxConcurrentValidations: maxConcurrentValidations,
     testExtensionConfig: testExtensionConfig,
     partialMessageExtensionConfig: partialMessageExtensionConfig,
     pingpongExtensionConfig: pingpongExtensionConfig,
@@ -252,6 +258,8 @@ proc validateParameters*(parameters: GossipSubParams): Result[void, cstring] =
     err("gossipsub: maxLowPriorityQueueLen parameter error, Must be > 0")
   elif parameters.maxIWantsPerMessage <= 0:
     err("gossipsub: maxIWantsPerMessage parameter error, Must be > 0")
+  elif parameters.maxConcurrentValidations <= 0:
+    err("gossipsub: maxConcurrentValidations parameter error, Must be > 0")
   else:
     validateOverheadRateLimit(parameters)
 
@@ -345,6 +353,8 @@ method onNewPeer*(g: GossipSub, peer: PubSubPeer) =
     g.disconnectIfBadScorePeer(peer, stats.score)
 
   peer.iHaveBudget = IHavePeerBudget
+  # onNewPeer runs before the first message, so no slot is held yet
+  peer.validationSlots = newAsyncSemaphore(g.parameters.maxConcurrentValidations)
 
 method onPubSubPeerEvent*(
     p: GossipSub, peer: PubSubPeer, event: PubSubPeerEvent
@@ -535,6 +545,41 @@ const iDontWantMessageSizeThreshold* = 512
 proc isLargeMessage(dataLen: int, msgId: MessageId): bool =
   dataLen > max(iDontWantMessageSizeThreshold, msgId.len * 10)
 
+proc forgetMessage(g: GossipSub, saltedId: SaltedId) =
+  g.validationSeen.del(saltedId)
+  discard g.seen.del(saltedId) # another peer's copy can still get validated
+
+proc acquireValidationSlot(
+    g: GossipSub, peer: PubSubPeer, saltedId: SaltedId
+) {.async: (raises: [CancelledError]).} =
+  when defined(libp2p_expensive_metrics):
+    libp2p_gossipsub_pending_validations.inc()
+  if peer.validationSlots.tryAcquire():
+    return
+
+  try:
+    await peer.validationSlots.acquire()
+  except CancelledError as e:
+    g.forgetMessage(saltedId)
+    when defined(libp2p_expensive_metrics):
+      libp2p_gossipsub_pending_validations.dec()
+    raise e
+
+proc releaseValidationSlot(peer: PubSubPeer) =
+  when defined(libp2p_expensive_metrics):
+    libp2p_gossipsub_pending_validations.dec()
+  try:
+    peer.validationSlots.release()
+  except AsyncSemaphoreError:
+    raiseAssert "validation slot released without acquire"
+
+proc validateInSlot(
+    g: GossipSub, peer: PubSubPeer, msg: Message
+): Future[ValidationResult] {.async: (raises: [CancelledError]).} =
+  defer:
+    peer.releaseValidationSlot()
+  await g.validate(msg)
+
 proc validateAndRelay(
     g: GossipSub, msg: Message, msgId: MessageId, saltedId: SaltedId, peer: PubSubPeer
 ) {.async: (raises: []).} =
@@ -561,7 +606,7 @@ proc validateAndRelay(
         peersToSendIDontWant.excl(sourcePeer[])
       g.sendIDontWant(topic, msgId, peersToSendIDontWant)
 
-    let validation = await g.validate(msg)
+    let validation = await g.validateInSlot(peer, msg)
 
     let seenPeers = g.validationSeen.getOrDefault(saltedId)
     libp2p_gossipsub_duplicate_during_validation.inc(seenPeers.len.int64)
@@ -828,6 +873,13 @@ method rpcHandler*(
     # Be careful not to fill the validationSeen table
     # (eg, pop everything you put in it)
     g.validationSeen[msgIdSalted] = initHashSet[PubSubPeer]()
+
+    # wait, not drop: msgId is already seen, so a drop loses the message
+    await g.acquireValidationSlot(peer, msgIdSalted)
+    if g.isStopping():
+      g.forgetMessage(msgIdSalted)
+      peer.releaseValidationSlot()
+      return
 
     g.pendingTasks.trackFut(g.validateAndRelay(msg, msgId, msgIdSalted, peer))
 
