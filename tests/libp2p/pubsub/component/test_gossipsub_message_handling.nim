@@ -226,12 +226,14 @@ suite "GossipSub Component - Message Handling":
 
   asyncTest "validation waits for a free slot of the sender and delivers every message":
     const cap = 2
-    var delivered: seq[string]
+    let gate = newFuture[void]()
+    let deliveredWhileGated = newFuture[string]()
+    let deliveredAfterGate = newWaitGroup(cap + 1)
     proc handler(topic: string, data: seq[byte]) {.async.} =
-      delivered.add(string.fromBytes(data))
-
-    proc noop(topic: string, data: seq[byte]) {.async.} =
-      discard
+      if gate.finished:
+        deliveredAfterGate.done()
+      else:
+        deliveredWhileGated.completeOnceRaising(string.fromBytes(data))
 
     let nodes =
       generateNodes(3, gossip = true, maxConcurrentValidations = cap).toGossipSub()
@@ -241,18 +243,18 @@ suite "GossipSub Component - Message Handling":
     await connectHub(receiver, @[flooder, other])
 
     receiver.subscribe(topic, handler)
-    flooder.subscribe(topic, noop)
-    other.subscribe(topic, noop)
+    flooder.subscribe(topic, voidTopicHandler)
+    other.subscribe(topic, voidTopicHandler)
     waitSubscribeHub(receiver, @[flooder, other], topic)
 
-    let gate = newFuture[void]()
-    var started, running, maxRunning = 0
+    let started = newWaitGroup(cap)
+    var running, maxRunning = 0
     proc validator(
         topic: string, message: Message
     ): Future[ValidationResult] {.async.} =
       if message.fromPeer != flooder.peerInfo.peerId:
         return ValidationResult.Accept
-      started.inc()
+      started.done()
       running.inc()
       maxRunning = max(maxRunning, running)
       await gate
@@ -263,22 +265,17 @@ suite "GossipSub Component - Message Handling":
     for i in 0 .. cap:
       tryPublish(await flooder.publish(topic, ("msg" & $i).toBytes()), 1)
 
-    checkUntilTimeout:
-      started == cap
+    await started.wait()
     tryPublish(await other.publish(topic, "other".toBytes()), 1)
 
     let flooderSlots = receiver.peers[flooder.peerInfo.peerId].validationSlots
-    checkUntilTimeout:
-      delivered == @["other"]
     check:
-      started == cap
+      (await deliveredWhileGated) == "other"
       flooderSlots.availableSlots == 0
 
     gate.complete()
-    checkUntilTimeout:
-      delivered.len == cap + 2
+    await deliveredAfterGate.wait()
     check:
-      started == cap + 1
       maxRunning == cap
       flooderSlots.availableSlots == cap
 
