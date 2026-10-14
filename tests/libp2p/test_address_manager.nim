@@ -751,8 +751,7 @@ suite "AddressManager verification":
       last = ma("/ip4/9.9.9.9/tcp/1")
       verifier = makeStubVerifier()
       manager =
-        makeManager(minCount = 1, verifyInterval = VerifyInterval,
-            verifier = verifier)
+        makeManager(minCount = 1, verifyInterval = VerifyInterval, verifier = verifier)
       peerInfo = makePeerInfo()
 
     manager.deriveIdentifyCandidates = true
@@ -777,14 +776,9 @@ suite "AddressManager verification":
       firstRefuter = randomPeerId()
       secondRefuter = randomPeerId()
       verifier = makeStubVerifier(
-        @[
-          verdict(
-            observed, AddrState.Confirmed, Opt.some(confirmingPeer)
-        )
-      ]
+        @[verdict(observed, AddrState.Confirmed, Opt.some(confirmingPeer))]
       )
-      manager =
-        makeManager(minCount = 1, verifyInterval = 1.hours, verifier = verifier)
+      manager = makeManager(minCount = 1, verifyInterval = 1.hours, verifier = verifier)
       peerInfo = makePeerInfo()
 
     manager.deriveIdentifyCandidates = true
@@ -795,11 +789,10 @@ suite "AddressManager verification":
     checkUntilTimeout:
       manager.confirmedAddrs() == @[observed]
 
-    verifier.verdicts =
-      @[
-        verdict(observed, AddrState.Unreachable, Opt.some(firstRefuter)),
-        verdict(observed, AddrState.Unreachable, Opt.some(secondRefuter)),
-      ]
+    verifier.verdicts = @[
+      verdict(observed, AddrState.Unreachable, Opt.some(firstRefuter)),
+      verdict(observed, AddrState.Unreachable, Opt.some(secondRefuter)),
+    ]
     let beforeFirstRefutation = verifier.asked.len
     await sleepAsync(VerifyInterval)
     manager.triggerVerification()

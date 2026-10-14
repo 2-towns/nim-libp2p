@@ -34,7 +34,7 @@ proc makePair(
           dialStatus: Opt.some(DialStatus.Ok),
           addrIdx: Opt.some(0.AddrIdx),
         ),
-    ),
+      ),
       expectedDials = expectedDials,
     )
   VerifierPair(
@@ -68,10 +68,8 @@ suite "AutonatV2 verifier":
     await pair.dialPeer()
 
     check:
-      (await pair.verifier.verify(addresses[0], @[])).get().state ==
-        AddrState.Confirmed
-      (await pair.verifier.verify(addresses[1], @[])).get().state ==
-        AddrState.Confirmed
+      (await pair.verifier.verify(addresses[0], @[])).get().state == AddrState.Confirmed
+      (await pair.verifier.verify(addresses[1], @[])).get().state == AddrState.Confirmed
 
       # one request per address, each carrying that address alone
       pair.client.allTestAddrs == @[@[addresses[0]], @[addresses[1]]]
@@ -86,8 +84,7 @@ suite "AutonatV2 verifier":
       await pair.stop()
     await pair.dialPeer()
 
-    check (await pair.verifier.verify(address, @[])).get().state ==
-      AddrState.Unreachable
+    check (await pair.verifier.verify(address, @[])).get().state == AddrState.Unreachable
 
   asyncTest "a peer without a verdict leaves the state alone":
     let pair = makePair(Unknown)

@@ -50,8 +50,7 @@ proc askPeer(
 ): Future[Opt[VerificationResult]] {.async: (raises: [CancelledError]).} =
   let reachability =
     try:
-      (await self.client.sendDialRequest(peerId, @[address]).wait(
-          AskTimeout)).reachability
+      (await self.client.sendDialRequest(peerId, @[address]).wait(AskTimeout)).reachability
     except CancelledError as e:
       raise e
     except AsyncTimeoutError:
