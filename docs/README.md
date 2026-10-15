@@ -9,7 +9,6 @@ Welcome to the nim-libp2p documentation. Use the links below to navigate:
 - [Common Hurdles](common_hurdles.md)
 - [Contributing](contributing.md)
 - [Compile Time Flags](compile_time_flags.md)
-- [Experimental GossipSub Topic Streams](gossipsub_topic_streams.md)
 - [Hole Punching Interop](interop_hole_punching.md)
 
 ---
