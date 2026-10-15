@@ -97,7 +97,7 @@ suite "GossipSub topic stream lifecycle":
     check TopicRPCHeader.decode(headerB).get().topic.get() == "b"
     check TopicRPC.decode(payloadB).isOk
     state.sendTopic("a", newSeq[byte](129), true)
-    check penalties == 1
+    check penalties == 0
     await state.closeTopic("a")
     state.sendTopic("a", payload, true)
     check remotes.len == 3
@@ -248,6 +248,7 @@ suite "GossipSub topic stream lifecycle":
     tasks.add(state.readTopic(receiver))
     await sender.writeLp(TopicRPCHeader(topic: Opt.some("again")).encode())
     await sender.write(@[24.byte])
+    # Yield so the reader reserves the frame body before the negative check.
     await sleepAsync(1.milliseconds)
     check not tasks[2].finished
     check penalties == 1
@@ -338,9 +339,9 @@ suite "GossipSub topic stream lifecycle":
       for i in 0 .. accepted:
         state.sendTopic($i, newSeq[byte](40), true)
       check dialCalls == accepted
-      check penalties == 1
+      check penalties == 0
       await state.closeTopic("0")
       state.sendTopic("0", newSeq[byte](40), true)
       check dialCalls == accepted + 1
-      check penalties == 1
+      check penalties == 0
       await state.stop()

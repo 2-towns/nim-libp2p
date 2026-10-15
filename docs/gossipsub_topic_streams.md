@@ -15,6 +15,9 @@ Supporting GossipSub 1.3 peers advertise protobuf extension field `6492435`.
 Peers without this capability continue using ordinary GossipSub RPCs. After
 negotiation, full and partial application messages use one outgoing stream per
 topic; subscriptions and all other control traffic retain the ordinary stream.
+This routing takes precedence over `PublishParams.useCustomStream` for peers
+that negotiated topic streams. The draft forbids empty application payloads, so
+they are not delivered to peers using topic streams.
 Each direction opens its own stream. The stream header supplies the topic, which
 is omitted from subsequent payloads and restored before message ID generation,
 signature verification, validation, and application delivery. Partial-message
@@ -36,12 +39,16 @@ allocated when the option is disabled.
 | `maxIncomingBytes` | 8 MiB | Incoming frames being read or handled, plus retained incoming headers |
 | `maxQueuedMessages` | 1024 | Queued and in-flight outgoing application messages |
 
+`maxStreams` must be at least 3, and the byte and message limits must be greater
+than zero. Invalid limits cause GossipSub initialization to fail.
+
 These are encoded-byte budgets, not measurements of total heap usage. Protobuf
 objects, queue entries, and transport framing/buffering add bounded overhead.
 The existing `maxMessageSize` also limits each header and application frame.
-Excess outgoing data is dropped; excess incoming streams or frames are reset.
-Resource-limit violations add a behavior penalty. Header reads time out after
-one second; outgoing stream establishment times out after five seconds.
+Outgoing overflow is dropped without changing the peer's score. Excess incoming
+streams or frames are reset and add a behavior penalty.
+Header reads time out after one second; outgoing stream establishment times out
+after five seconds.
 
 The receiver accepts up to three overlapping streams for a topic to tolerate
 transport reordering during replacement. The sender closes an old stream before
