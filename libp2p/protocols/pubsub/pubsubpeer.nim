@@ -547,9 +547,12 @@ proc clearSendPriorityQueue(p: PubSubPeer) =
 
 func priorityLabel(priority: MessagePriority): string =
   case priority
-  of High: return "high"
-  of Medium: return "medium"
-  of Low: return "low"
+  of High:
+    return "high"
+  of Medium:
+    return "medium"
+  of Low:
+    return "low"
 
 func bytesNeeded(currentBytes, messageBytes, maxBytes: int): int =
   if fitsWithin(currentBytes, messageBytes, maxBytes):
@@ -627,8 +630,9 @@ proc makePeerRoom(p: PubSubPeer, priority: MessagePriority, messageBytes: int) =
     let
       nonHighBytes = p.queuedBytes(Medium) + p.queuedBytes(Low)
       maxNonHighBytes =
-        p.maxOutboundQueueBytes -
-        highPriorityQueueReservedBytes(p.maxOutboundQueueBytes)
+        p.maxOutboundQueueBytes - highPriorityQueueReservedBytes(
+          p.maxOutboundQueueBytes
+        )
       removableBytes = p.evictableQueuedBytes(Low)
       needed = max(
         bytesNeeded(p.queuedBytes(), messageBytes, p.maxOutboundQueueBytes),
@@ -738,10 +742,7 @@ proc sendHighPriorityMessage(
   return newFutureCompleted[void]()
 
 proc enqueueNonHighPriorityMessage(
-    p: PubSubPeer,
-    msg: sink seq[byte],
-    useCustomStream: bool,
-    priority: MessagePriority,
+    p: PubSubPeer, msg: sink seq[byte], useCustomStream: bool, priority: MessagePriority
 ): Future[void] =
   let messageBytes = msg.len
   p.chargeBytes(priority, messageBytes)
