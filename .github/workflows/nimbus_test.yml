@@ -1,0 +1,159 @@
+name: Nimbus test
+
+on:
+  pull_request:
+    types: [opened, labeled, synchronize, reopened, closed]
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "nim-libp2p commit, branch, or tag to test"
+        required: true
+      keep_branch:
+        description: "Keep the nimbus-eth2 test branch after the run"
+        type: boolean
+        default: false
+
+concurrency:
+  group: nimbus-test-${{ github.event.pull_request.number || inputs.commit }}${{ github.event.action == 'labeled' && github.event.label.name != 'test-nimbus' && format('-{0}', github.run_id) || '' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NIMBUS_REPO: status-im/nimbus-eth2
+  NIMBUS_BASE: unstable
+  BRANCH_PREFIX: nim-libp2p-test-
+
+jobs:
+  test-branch:
+    name: Push the nimbus-eth2 test branch
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.action != 'closed' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        contains(github.event.pull_request.labels.*.name, 'test-nimbus') &&
+        (github.event.action != 'labeled' || github.event.label.name == 'test-nimbus'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      branch: ${{ steps.prepare.outputs.branch }}
+      libp2p_sha: ${{ steps.prepare.outputs.libp2p_sha }}
+      nimbus_sha: ${{ steps.push.outputs.nimbus_sha }}
+    steps:
+      - name: Checkout nim-libp2p tools
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          path: libp2p-ci
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Checkout nimbus-eth2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: ${{ env.NIMBUS_REPO }}
+          ref: ${{ env.NIMBUS_BASE }}
+          path: nbc
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Point vendor/nim-libp2p at the commit under test
+        id: prepare
+        env:
+          LIBP2P_REF: ${{ inputs.commit || github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LIBP2P_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          cd nbc/vendor/nim-libp2p
+          git fetch --quiet "$LIBP2P_URL" "$LIBP2P_REF"
+          git checkout --quiet FETCH_HEAD
+          git submodule update --init --recursive --quiet
+          sha=$(git rev-parse HEAD)
+
+          if [ -n "$PR_NUMBER" ]; then
+            branch="${BRANCH_PREFIX}pr-$PR_NUMBER"
+          else
+            branch="$BRANCH_PREFIX${sha:0:8}"
+          fi
+          echo "libp2p_sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Align vendor submodules with libp2p.nimble
+        run: |
+          python3 libp2p-ci/tools/align_nimbus_vendor.py nbc | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Push the nimbus-eth2 test branch
+        id: push
+        env:
+          BRANCH: ${{ steps.prepare.outputs.branch }}
+          LIBP2P_SHA: ${{ steps.prepare.outputs.libp2p_sha }}
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.ACTIONS_GITHUB_TOKEN_NIMBUS_ETH2 }}
+        run: |
+          cd nbc
+          git config user.email "$ACTOR@users.noreply.github.com"
+          git config user.name "$ACTOR"
+          git switch --quiet -c "$BRANCH"
+          git add .gitmodules vendor
+          git commit --quiet --allow-empty -m "test nim-libp2p $LIBP2P_SHA"
+          auth=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git -c http.extraheader="AUTHORIZATION: basic $auth" push --quiet --force origin "$BRANCH"
+          echo "nimbus_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "nimbus-eth2 branch \`$BRANCH\` at $(git rev-parse HEAD), nim-libp2p $LIBP2P_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+  local-testnet:
+    name: Local testnet (${{ matrix.preset }})
+    needs: test-branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [minimal, mainnet]
+    steps:
+      - name: Checkout the nimbus-eth2 test branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: ${{ env.NIMBUS_REPO }}
+          ref: ${{ needs.test-branch.outputs.nimbus_sha }}
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Run the local testnet
+        run: make -j"$(nproc)" local-testnet-${{ matrix.preset }}
+
+      - name: Upload testnet logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: local-testnet-${{ matrix.preset }}-${{ needs.test-branch.outputs.libp2p_sha }}
+          path: local-testnet-${{ matrix.preset }}/logs
+          retention-days: 14
+
+  cleanup:
+    name: Delete the nimbus-eth2 test branch
+    needs: [test-branch, local-testnet]
+    if: >
+      always() &&
+      ((github.event_name == 'pull_request' && github.event.action == 'closed' &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+        (github.event_name == 'workflow_dispatch' && !inputs.keep_branch && needs.test-branch.outputs.branch != ''))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Delete branch
+        env:
+          GH_TOKEN: ${{ secrets.ACTIONS_GITHUB_TOKEN_NIMBUS_ETH2 }}
+          BRANCH: ${{ needs.test-branch.outputs.branch }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          BRANCH=${BRANCH:-${BRANCH_PREFIX}pr-$PR_NUMBER}
+          if ! out=$(gh api -X DELETE "repos/$NIMBUS_REPO/git/refs/heads/$BRANCH" 2>&1); then
+            grep -q "Reference does not exist" <<< "$out" || { echo "$out" >&2; exit 1; }
+            echo "branch $BRANCH is already gone"
+          fi
