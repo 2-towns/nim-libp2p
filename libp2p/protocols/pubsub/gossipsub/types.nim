@@ -168,10 +168,6 @@ type
 
     # Encoded RPC byte limits include queued messages and pending writes.
     maxOutboundQueueBytes*: int
-    highPriorityQueueReservedBytes*: int
-    maxLowPriorityQueueBytes*: int
-    maxNonHighPriorityQueueAge*: Duration
-    maxTotalOutboundQueueBytes*: int
 
     # Broadcast an IDONTWANT message automatically when the message exceeds the IDONTWANT message size threshold
     sendIDontWantOnPublish*: bool

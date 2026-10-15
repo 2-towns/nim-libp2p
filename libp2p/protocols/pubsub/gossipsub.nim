@@ -138,10 +138,6 @@ proc init*(
     partialMessageExtensionConfig = Opt.none(PartialMessageExtensionConfig),
     pingpongExtensionConfig = Opt.none(PingPongExtensionConfig),
     maxOutboundQueueBytes = DefaultMaxOutboundQueueBytes,
-    highPriorityQueueReservedBytes = DefaultHighPriorityQueueReservedBytes,
-    maxLowPriorityQueueBytes = DefaultMaxLowPriorityQueueBytes,
-    maxNonHighPriorityQueueAge = DefaultMaxNonHighPriorityQueueAge,
-    maxTotalOutboundQueueBytes = DefaultMaxTotalOutboundQueueBytes,
 ): GossipSubParams =
   GossipSubParams(
     explicit: true,
@@ -186,10 +182,6 @@ proc init*(
     maxMediumPriorityQueueLen: maxMediumPriorityQueueLen,
     maxLowPriorityQueueLen: maxLowPriorityQueueLen,
     maxOutboundQueueBytes: maxOutboundQueueBytes,
-    highPriorityQueueReservedBytes: highPriorityQueueReservedBytes,
-    maxLowPriorityQueueBytes: maxLowPriorityQueueBytes,
-    maxNonHighPriorityQueueAge: maxNonHighPriorityQueueAge,
-    maxTotalOutboundQueueBytes: maxTotalOutboundQueueBytes,
     sendIDontWantOnPublish: sendIDontWantOnPublish,
     testExtensionConfig: testExtensionConfig,
     partialMessageExtensionConfig: partialMessageExtensionConfig,
@@ -260,19 +252,6 @@ proc validateParameters*(parameters: GossipSubParams): Result[void, cstring] =
     err("gossipsub: maxLowPriorityQueueLen parameter error, Must be > 0")
   elif parameters.maxOutboundQueueBytes <= 0:
     err("gossipsub: maxOutboundQueueBytes parameter error, Must be > 0")
-  elif parameters.highPriorityQueueReservedBytes < 0 or
-      parameters.highPriorityQueueReservedBytes >= parameters.maxOutboundQueueBytes:
-    err(
-      "gossipsub: highPriorityQueueReservedBytes parameter error, Must be >= 0 and < maxOutboundQueueBytes"
-    )
-  elif parameters.maxLowPriorityQueueBytes <= 0:
-    err("gossipsub: maxLowPriorityQueueBytes parameter error, Must be > 0")
-  elif parameters.maxNonHighPriorityQueueAge <= ZeroDuration:
-    err("gossipsub: maxNonHighPriorityQueueAge parameter error, Must be > 0")
-  elif parameters.maxTotalOutboundQueueBytes < parameters.maxOutboundQueueBytes:
-    err(
-      "gossipsub: maxTotalOutboundQueueBytes parameter error, Must be >= maxOutboundQueueBytes"
-    )
   else:
     validateOverheadRateLimit(parameters)
 
@@ -1262,9 +1241,5 @@ method getOrCreatePeer*(
   peer.maxMediumPriorityQueueLen = g.parameters.maxMediumPriorityQueueLen
   peer.maxLowPriorityQueueLen = g.parameters.maxLowPriorityQueueLen
   peer.maxOutboundQueueBytes = g.parameters.maxOutboundQueueBytes
-  peer.highPriorityQueueReservedBytes = g.parameters.highPriorityQueueReservedBytes
-  peer.maxLowPriorityQueueBytes = g.parameters.maxLowPriorityQueueBytes
-  peer.maxNonHighPriorityQueueAge = g.parameters.maxNonHighPriorityQueueAge
-  g.outboundQueueBudget.maxBytes = g.parameters.maxTotalOutboundQueueBytes
 
   return peer
