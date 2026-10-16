@@ -21,7 +21,7 @@ libp2p is a [Peer-to-Peer](https://en.wikipedia.org/wiki/Peer-to-peer) networkin
 Building large scale peer-to-peer systems has been complex and difficult in the last 15 years and libp2p is a way to fix that. It strives to be a modular stack with secure defaults and useful protocols, while remaining open and extensible.
 This is a native Nim implementation, using [chronos](https://github.com/status-im/nim-chronos) for asynchronous execution. It's used in production by a few [projects](#users).
 
-Learn more about libp2p at [**libp2p.io**](https://libp2p.io) and follow libp2p's documentation [**docs.libp2p.io**](https://docs.libp2p.io).
+Learn more about libp2p at [**libp2p.io**](https://libp2p.io) and follow libp2p's documentation [**libp2p.io/docs**](https://libp2p.io/docs).
 
 ## Contribute
 
@@ -104,8 +104,8 @@ List of packages modules implemented in nim-libp2p:
 | [libp2p](nim-libp2p/libp2p/switch.nim) | The core Switch orchestrating transports, connections, and protocols |
 | [builders](nim-libp2p/libp2p/builders.nim) | SwitchBuilder fluent API for configuring and instantiating nodes |
 | [connmanager](nim-libp2p/libp2p/connmanager.nim) | Connection manager |
-| [identify / push identify](nim-libp2p/libp2p/protocols/identify.nim) | [Identify](https://docs.libp2p.io/concepts/fundamentals/protocols/#identify) protocol |
-| [ping](nim-libp2p/libp2p/protocols/ping.nim) | [Ping](https://docs.libp2p.io/concepts/fundamentals/protocols/#ping) protocol |
+| [identify / push identify](nim-libp2p/libp2p/protocols/identify.nim) | [Identify](https://libp2p.io/docs/protocols/#identify) protocol |
+| [ping](nim-libp2p/libp2p/protocols/ping.nim) | [Ping](https://libp2p.io/docs/protocols/#ping) protocol |
 | [rendezvous](nim-libp2p/libp2p/protocols/rendezvous.nim) | [Rendezvous](https://github.com/libp2p/specs/blob/master/rendezvous/README.md) peer discovery protocol |
 | **Transports** | |
 | [tcp](nim-libp2p/libp2p/transports/tcptransport.nim) | TCP transport |
@@ -114,14 +114,14 @@ List of packages modules implemented in nim-libp2p:
 | [tor](nim-libp2p/libp2p/transports/tortransport.nim) | Tor transport |
 | [memory](nim-libp2p/libp2p/transports/memorytransport.nim) | In-memory transport for testing |
 | **Secure Channels** | |
-| [noise](nim-libp2p/libp2p/protocols/secure/noise.nim) | [Noise](https://docs.libp2p.io/concepts/secure-comm/noise/) secure channel |
+| [noise](nim-libp2p/libp2p/protocols/secure/noise.nim) | [Noise](https://libp2p.io/docs/noise/) secure channel |
 | [plaintext](nim-libp2p/libp2p/protocols/secure/plaintext.nim) | Plain text for development purposes |
 | **Stream Multiplexers** | |
 | [mplex](nim-libp2p/libp2p/muxers/mplex/mplex.nim) | [MPlex](https://github.com/libp2p/specs/tree/master/mplex) multiplexer |
 | [yamux](nim-libp2p/libp2p/muxers/yamux/yamux.nim) | [Yamux](https://github.com/libp2p/specs/tree/master/yamux) multiplexer |
 | **Data Types** | |
-| [peer-id](nim-libp2p/libp2p/peerid.nim) | [Cryptographic peer identifiers](https://docs.libp2p.io/concepts/fundamentals/peers/#peer-id) |
-| [peer-store](nim-libp2p/libp2p/peerstore.nim) | [Address book of known peers](https://docs.libp2p.io/concepts/fundamentals/peers/#peer-store) |
+| [peer-id](nim-libp2p/libp2p/peerid.nim) | [Cryptographic peer identifiers](https://libp2p.io/docs/peers/#peer-id) |
+| [peer-store](nim-libp2p/libp2p/peerstore.nim) | [Address book of known peers](https://libp2p.io/docs/peers/#peer-store) |
 | [multiaddress](nim-libp2p/libp2p/multiaddress.nim) | [Composable network addresses](https://github.com/multiformats/multiaddr) |
 | [signed-envelope](nim-libp2p/libp2p/signed_envelope.nim) | [Signed generic data container](https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md) |
 | [routing-record](nim-libp2p/libp2p/routing_record.nim) | [Signed peer dialing information](https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md) |
@@ -129,7 +129,7 @@ List of packages modules implemented in nim-libp2p:
 | **Connectivity** | |
 | [autonat](nim-libp2p/libp2p/protocols/connectivity/autonat/service.nim) | [AutoNAT v1](https://github.com/libp2p/specs/blob/master/autonat/README.md) - automatic NAT detection |
 | [autonat-v2](nim-libp2p/libp2p/protocols/connectivity/autonatv2/service.nim) | [AutoNAT v2](https://github.com/libp2p/specs/blob/master/autonat/autonat-v2.md) - improved NAT detection |
-| [relay](nim-libp2p/libp2p/protocols/connectivity/relay/relay.nim) | [Circuit Relay v2](https://docs.libp2p.io/concepts/nat/circuit-relay/) for NAT traversal |
+| [relay](nim-libp2p/libp2p/protocols/connectivity/relay/relay.nim) | [Circuit Relay v2](https://libp2p.io/docs/circuit-relay/) for NAT traversal |
 | [dcutr](nim-libp2p/libp2p/protocols/connectivity/dcutr/core.nim) | [Direct Connection Upgrade through Relay](https://github.com/libp2p/specs/blob/master/relay/DCUtR.md) (hole punching) |
 | [hole-punching service](nim-libp2p/libp2p/services/hpservice.nim) | Hole punching service coordinating AutoNAT, Relay, and DCUTR |
 | [auto-relay service](nim-libp2p/libp2p/services/autorelayservice.nim) | Automatic relay node discovery and management |

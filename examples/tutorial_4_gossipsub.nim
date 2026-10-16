@@ -9,7 +9,7 @@
 ## privacy and attack resistance.
 ##
 ## You'll find a good explanation of how GossipSub works
-## [here.](https://docs.libp2p.io/concepts/publish-subscribe/) There are a lot
+## [here.](https://libp2p.io/docs/pubsub/) There are a lot
 ## of parameters you can tweak to adjust how GossipSub behaves but here we'll
 ## use the sane defaults shipped with libp2p.
 ##
