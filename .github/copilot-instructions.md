@@ -62,7 +62,7 @@ nim-libp2p/
 
 ### Setup
 ```sh
-git clone https://github.com/vacp2p/nim-libp2p
+git clone https://github.com/iftech/nim-libp2p
 cd nim-libp2p
 make                 # Set up lowest supported dependency set
 # Or: nix develop     # Nix-based dev environment

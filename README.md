@@ -5,7 +5,7 @@
 <h3 align="center">The <a href="https://nim-lang.org/">Nim</a> implementation of the <a href="https://libp2p.io/">libp2p</a> Networking Stack.</h3>
 
 <p align="center">
-<a href="https://github.com/vacp2p/nim-libp2p/actions"><img src="https://github.com/vacp2p/nim-libp2p/actions/workflows/test_all.yml/badge.svg" /></a>
+<a href="https://github.com/iftech/nim-libp2p/actions"><img src="https://github.com/iftech/nim-libp2p/actions/workflows/test_all.yml/badge.svg" /></a>
 
 </p>
 
@@ -46,7 +46,7 @@ You'll find the nim-libp2p documentation [here](https://iftech.github.io/nim-lib
 For local development:
 
 ```sh
-git clone --recurse-submodules https://github.com/vacp2p/nim-libp2p
+git clone --recurse-submodules https://github.com/iftech/nim-libp2p
 cd nim-libp2p
 make
 make test
@@ -59,7 +59,7 @@ For more details, refer to the [documentation](docs/README.md).
 
 Thanks to everyone who has contributed to nim-libp2p. Your support and efforts are greatly appreciated.
 
-<a href="https://github.com/vacp2p/nim-libp2p/graphs/contributors"><img src="https://contrib.rocks/image?repo=vacp2p/nim-libp2p" alt="nim-libp2p contributors"></a>
+<a href="https://github.com/iftech/nim-libp2p/graphs/contributors"><img src="https://contrib.rocks/image?repo=iftech/nim-libp2p" alt="nim-libp2p contributors"></a>
 
 ## Join the Conversation
 
