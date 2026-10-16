@@ -47,7 +47,7 @@ jobs:
       - name: Clone the gh-pages branch
         uses: actions/checkout@v6
         with:
-          repository: iftech/nim-libp2p
+          repository: ${{ github.repository }}
           ref: gh-pages
           path: subdoc
           submodules: true
@@ -98,7 +98,7 @@ jobs:
       - name: Clone the gh-pages branch
         uses: actions/checkout@v6
         with:
-          repository: iftech/nim-libp2p
+          repository: ${{ github.repository }}
           ref: gh-pages
           path: subdoc
           fetch-depth: 0
