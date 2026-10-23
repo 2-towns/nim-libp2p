@@ -523,7 +523,7 @@ suite "AutonatV2":
       ).encode()
     )
     let response = AutonatV2Msg.decode(await stream.readLp(AutonatV2MsgLpSize)).get()
-    check response.oneof.dialResponse.dialStatus == Opt.some(DialStatus.EDialError)
+    check response.oneof.dialResponse.dialStatus == DialStatus.EDialError
     checkUntilTimeout:
       src.connManager.connCount(dst.peerInfo.peerId) == 1
 
@@ -607,9 +607,9 @@ suite "AutonatV2":
           maxConcurrentRequestsPerPeer = 1, maxConcurrentRequestsTotal = 2
         ),
       )
-      peerA = PeerId.random(rng()).get()
-      peerB = PeerId.random(rng()).get()
-      peerC = PeerId.random(rng()).get()
+      peerA = PeerId.random()
+      peerB = PeerId.random()
+      peerC = PeerId.random()
 
     check:
       autonatServer.reserveIncoming(peerA)

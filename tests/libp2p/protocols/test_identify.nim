@@ -88,10 +88,10 @@ suite "Identify":
       discard await msDial.select(conn, IdentifyCodec)
       let id = await identifyProto2.identify(conn, remotePeerInfo.peerId)
 
-      check id.pubkey.get() == remoteSecKey.getPublicKey().get()
+      check id.pubkey == remoteSecKey.getPublicKey().get()
       check id.addrs == maddr
-      check id.protoVersion.get() == ProtoVersion
-      check id.agentVersion.get() == AgentVersion
+      check id.protoVersion == ProtoVersion
+      check id.agentVersion == AgentVersion
       check id.protos == @["/test/proto1/1.0.0", "/test/proto2/1.0.0"]
       check id.signedPeerRecord.isNone()
 
@@ -112,10 +112,10 @@ suite "Identify":
       discard await msDial.select(conn, IdentifyCodec)
       let id = await identifyProto2.identify(conn, remotePeerInfo.peerId)
 
-      check id.pubkey.get() == remoteSecKey.getPublicKey().get()
+      check id.pubkey == remoteSecKey.getPublicKey().get()
       check id.addrs == maddr
-      check id.protoVersion.get() == customProtoVersion
-      check id.agentVersion.get() == customAgentVersion
+      check id.protoVersion == customProtoVersion
+      check id.agentVersion == customAgentVersion
       check id.protos == @["/test/proto1/1.0.0", "/test/proto2/1.0.0"]
       check id.signedPeerRecord.isNone()
 
@@ -209,12 +209,12 @@ suite "Identify":
       discard await msDial.select(conn, IdentifyCodec)
       let id = await identifyProto2.identify(conn, remotePeerInfo.peerId)
 
-      check id.pubkey.get() == remoteSecKey.getPublicKey().get()
+      check id.pubkey == remoteSecKey.getPublicKey().get()
       check id.addrs == maddr
-      check id.protoVersion.get() == ProtoVersion
-      check id.agentVersion.get() == AgentVersion
+      check id.protoVersion == ProtoVersion
+      check id.agentVersion == AgentVersion
       check id.protos == @["/test/proto1/1.0.0", "/test/proto2/1.0.0"]
-      check id.signedPeerRecord.get() == remotePeerInfo.signedPeerRecord.envelope
+      check id.signedPeerRecord == remotePeerInfo.signedPeerRecord.envelope
 
   suite "handle push identify message":
     var

@@ -62,7 +62,7 @@ nim-libp2p/
 
 ### Setup
 ```sh
-git clone https://github.com/vacp2p/nim-libp2p
+git clone https://github.com/iftech/nim-libp2p
 cd nim-libp2p
 make                 # Set up lowest supported dependency set
 # Or: nix develop     # Nix-based dev environment
@@ -506,7 +506,8 @@ nimble genbindings_cddl # Generate the CDDL schema
 | `daily_test_all_latest_deps.yml` | Daily tests that run using latest dependencies |
 | `daily_test_all_no_flags.yml` | Tests without experimental flags |
 | `daily_ci_report.yml` | Daily CI failure reporting: opens/updates GitHub issues for failed daily CI runs |
-| `daily_nimbus.yml` | Nimbus-specific test matrix |
+| `nimbus_test.yml` | Nimbus build and tests against this nim-libp2p commit (daily, on PR label, or manual) |
+| `nimbus_fleet.yml` | Pushes a passed, `test-nimbus`-labelled or manual Nimbus test commit to the nimbus-eth2 fleet branch |
 | `daily_runnable_examples.yml` | Daily runnable examples checks |
 | `cbindings.yml` | FFI library build + C/CDDL binding generation |
 | `coverage.yml` | Code coverage |
@@ -544,7 +545,7 @@ Uses `lsquic` (`>= 0.4.1`). May require extra system dependencies for building.
 
 ## Documentation
 
-- **API docs**: https://vacp2p.github.io/nim-libp2p/docs/
+- **API docs**: https://iftech.github.io/nim-libp2p/docs/
 - **libp2p spec**: https://github.com/libp2p/specs
 - **Chronos async**: https://github.com/status-im/nim-chronos
 - **Chronicles logging**: https://github.com/status-im/nim-chronicles

@@ -47,7 +47,6 @@ const
   ConcurrentUpgrades* = 32
   MaxRejectedConnectionCloses = ConcurrentUpgrades
   UpgradeTimeout* = 30.seconds
-  AcceptRetryDelay* = 100.millis
 
 # a Switch built field by field, as TorSwitch and SwitchStub do, must copy it
 const MissingAddressManager = "switch has no AddressManager"
@@ -270,16 +269,20 @@ proc add*(
 
   s.services.add(service)
 
+const
+  MissingHandlerCause* = "Protocol has to define a handle method or proc"
+  MissingCodecCause* = "Protocol has to define a codec string"
+
 proc tryMount*[T: LPProtocol](
     s: Switch, proto: T, matcher: Matcher = nil
-): Result[void, string] {.gcsafe, raises: [].} =
+): LPResult[void] {.gcsafe, raises: [].} =
   ## mount a protocol to the switch, or return why the protocol is invalid
 
   if proto.handler.isNil:
-    return err("Protocol has to define a handle method or proc")
+    return err(MissingHandlerCause)
 
   if proto.codecs.len == 0 or proto.codec.len == 0:
-    return err("Protocol has to define a codec string")
+    return err(MissingCodecCause)
 
   if s.started and not proto.started:
     return err("Protocol needs to be started when mounting to started Switch")
@@ -361,22 +364,7 @@ proc accept(s: Switch, transport: Transport) {.async: (raises: []).} =
   while transport.running:
     var conn: RawConn
     try:
-      conn =
-        try:
-          await transport.accept()
-        except CancelledError as exc:
-          raise exc
-        except CatchableError as exc:
-          raise
-            newException(CatchableError, "failed to accept connection: " & exc.msg, exc)
-      if isNil(conn):
-        # A nil connection means that we might have hit a
-        # file-handle limit (or another non-fatal error),
-        # we can get one on the next try
-        trace "Transport connection acceptance returned no connection",
-          addresses = transport.addrs
-        await sleepAsync(AcceptRetryDelay)
-        continue
+      conn = await transport.accept()
 
       let slot = s.connManager.tryGetIncomingSlot().valueOr:
         debug "Incoming connection limit reached", conn
@@ -482,6 +470,12 @@ proc start*(s: Switch) {.async: (raises: [CancelledError, LPError]).} =
   # start services and transports without await to prevent any
   # issues when one needs another to start first.
   var startFuts: seq[Future[void]]
+
+  # the transport loop drains listenAddrs, so a retry after a failed start needs them back
+  let listenAddrs = s.peerInfo.listenAddrs
+  defer:
+    if not s.started:
+      s.peerInfo.listenAddrs = listenAddrs
 
   for service in s.services:
     startFuts.add(service.start(s))

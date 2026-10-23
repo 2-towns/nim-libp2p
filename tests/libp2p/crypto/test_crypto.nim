@@ -7,7 +7,7 @@ import std/[sequtils, algorithm]
 import bearssl/[hash, rand], nimcrypto/utils
 import chronicles, json_serialization
 import ../../../libp2p/crypto/[crypto, chacha20poly1305, curve25519, hkdf]
-import ../../../libp2p/utils/redact
+import ../../../libp2p/utils/[redact, opt]
 import ../../tools/[unittest, crypto]
 
 ## Test vectors was made using Go implementation
@@ -650,6 +650,57 @@ suite "Key interface test suite":
     rng().shuffle(cards)
     check cards.toSeq().sorted() == original
 
+  test "shuffle leaves empty and singleton arrays and RNG state unchanged":
+    var seed = [byte 1, 2, 3, 4, 5, 6, 7, 8]
+    let ctx = (ref HmacDrbgContext)()
+    var expectedCtx: HmacDrbgContext
+    hmacDrbgInit(ctx[], addr sha256Vtable, addr seed[0], uint seed.len)
+    hmacDrbgInit(expectedCtx, addr sha256Vtable, addr seed[0], uint seed.len)
+    let random = newBearSslRng(ctx)
+    var empty: seq[int]
+    var singleton = [42]
+
+    random.shuffle(empty)
+    random.shuffle(singleton)
+    check empty.len == 0
+    check singleton == [42]
+
+    var got, expected: array[32, byte]
+    random.generate(got)
+    hmacDrbgGenerate(expectedCtx, addr expected[0], uint expected.len)
+    check got == expected
+
+  test "shuffle can produce every permutation":
+    let random = rng()
+
+    var seenPairs: seq[array[2, int]]
+    for _ in 0 ..< 200:
+      var xs = [1, 2]
+      random.shuffle(xs)
+      if xs notin seenPairs:
+        seenPairs.add(xs)
+    check seenPairs.len == 2
+
+    var seenTriples: seq[array[3, int]]
+    for _ in 0 ..< 600:
+      var xs = [1, 2, 3]
+      random.shuffle(xs)
+      if xs notin seenTriples:
+        seenTriples.add(xs)
+    check seenTriples.len == 6
+
+  test "rand rejects samples below the uniform threshold":
+    var seed = [48'u8, 0, 0, 0, 0, 0, 0, 0]
+    let ctx = (ref HmacDrbgContext)()
+    hmacDrbgInit(ctx[], addr sha256Vtable, addr seed[0], uint seed.len)
+    let random = newBearSslRng(ctx)
+
+    # The first draw (1530bb4c) is rejected in either byte order; the next is accepted.
+    when cpuEndian == littleEndian:
+      check random.rand(0, 1_500_000_000) == 279_358_677
+    else:
+      check random.rand(0, 1_500_000_000) == 604_680_296
+
   test "newBearSslRng wraps existing HMAC-DRBG context":
     var seed = [byte 1, 2, 3, 4, 5, 6, 7, 8]
     let ctx = (ref HmacDrbgContext)()
@@ -676,7 +727,7 @@ suite "Key interface test suite":
     check rng().pickOne(x).isNone()
 
   test "pickOne returns the only element of a singleton":
-    check rng().pickOne(@[42]).get() == 42
+    check rng().pickOne(@[42]) == 42
 
   test "pick returns none for empty sequence":
     check rng().pick(newSeq[int](), 3).isNone()

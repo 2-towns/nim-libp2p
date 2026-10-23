@@ -466,7 +466,7 @@ suite "Advertiser - maintainRegistrations":
     await stream.hung.wait()
 
     let stalled = toSeq(disco.advertiser.running)[0]
-    let replacement = randomPeerId()
+    let replacement = PeerId.random()
     disco.switch.peerStore[AddressBook][replacement] = @[makeMultiAddress("127.0.0.1")]
     let table = disco.rtManager.getTable(serviceId).get()
     let pos = table.buckets[stalled.bucketIdx].peers.find(stalled.registrar.toKey())
@@ -524,7 +524,7 @@ suite "Advertiser - removeProvidedService":
     check sid in disco.serviceBootstrapFuts # the self-ad keeps the table alive
 
     disco.dropCachedAds()
-    await sleepAsync(0.millis) # let the pending cancellation run
+    await stepsAsync(1) # let the pending cancellation run
 
     check:
       sid notin disco.serviceBootstrapFuts

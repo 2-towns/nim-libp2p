@@ -247,9 +247,9 @@ proc getPeers(prune: ControlPrune, peer: PubSubPeer): seq[(PeerId, Opt[PeerRecor
       continue
 
     var peerRecord = Opt.none(PeerRecord)
-    if record.signedPeerRecord.isSome:
-      SignedPeerRecord.decode(record.signedPeerRecord.get()).toOpt().ifValue(spr):
-        if record.peerId.isSome and record.peerId.get() != spr.data.peerId:
+    record.signedPeerRecord.ifValue(signedPeerRecord):
+      SignedPeerRecord.decode(signedPeerRecord).toOpt().ifValue(spr):
+        if record.peerId != spr.data.peerId:
           trace "peer sent envelope with wrong public key", peer
         else:
           peerRecord = Opt.some(spr.data)
@@ -317,12 +317,15 @@ proc handlePrune*(g: GossipSub, peer: PubSubPeer, prunes: seq[ControlPrune]) =
     g.pruned(peer, topic, setBackoff = false)
     g.mesh.removePeer(topic, peer)
 
-    if peer.score > g.parameters.gossipThreshold and prune.peers.len > 0 and
+    if peer.score >= g.parameters.acceptPXThreshold and prune.peers.len > 0 and
         g.routingRecordsHandler.len > 0:
       let routingRecords = prune.getPeers(peer)
 
       for handler in g.routingRecordsHandler:
         handler(peer.peerId, topic, routingRecords)
+    elif peer.score < g.parameters.acceptPXThreshold and prune.peers.len > 0:
+      trace "ignoring peer exchange, peer score below acceptPXThreshold",
+        peer, score = peer.score, acceptPXThreshold = g.parameters.acceptPXThreshold
 
 proc recordIWantRequest(g: GossipSub, peer: PubSubPeer, saltedId: SaltedId) =
   g.requestedIWants.mgetOrPut(saltedId, @[]).add(

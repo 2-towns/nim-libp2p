@@ -573,7 +573,7 @@ method handleConn*(
   peer.connect()
 
   try:
-    await peer.runHandleLoop(stream)
+    await peer.handleRecvStream(stream)
   except CancelledError as exc:
     raise exc
   finally:
@@ -728,6 +728,7 @@ method initPubSub*(p: PubSub) {.base, raises: [InitializationError].} =
   p.observers = new(seq[PubSubObserver])
   if p.msgIdProvider == nil:
     p.msgIdProvider = defaultMsgIdProvider
+  p.rng.generate(p.msgSeqno)
 
 {.pop.}
 
